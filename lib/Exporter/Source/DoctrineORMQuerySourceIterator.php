@@ -1,5 +1,4 @@
 <?php
-
 /*
  * This file is part of the Sonata package.
  *
@@ -8,13 +7,13 @@
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-
 namespace Exporter\Source;
 
 use Exporter\Exception\InvalidMethodCallException;
 use Doctrine\ORM\Query;
 use Exporter\Source\SourceIteratorInterface;
-use Symfony\Component\Form\Util\PropertyPath;
+use Symfony\Component\PropertyAccess\PropertyAccess;
+use Symfony\Component\PropertyAccess\PropertyPath;
 
 class DoctrineORMQuerySourceIterator implements SourceIteratorInterface
 {
@@ -31,20 +30,25 @@ class DoctrineORMQuerySourceIterator implements SourceIteratorInterface
     protected $propertyPaths;
 
     /**
-     * @param \Doctrine\ORM\Query $query  The Doctrine Query
+     * @var PropertyAccess
+     */
+    protected $propertyAccessor;
+
+    /**
+     * @param \Doctrine\ORM\Query $query The Doctrine Query
      * @param array               $fields Fields to export
      */
-    public function __construct(Query $query, array $fields)
+    public function __construct( Query $query, array $fields )
     {
         $this->query = clone $query;
-        $this->query->setParameters($query->getParameters());
-
-        $this->propertyPaths = array();
-        foreach ($fields as $name => $field) {
-            if (is_string($name) && is_string($field)) {
-                $this->propertyPaths[$name] = new PropertyPath($field);
+        $this->query->setParameters( $query->getParameters() );
+        $this->propertyAccessor = PropertyAccess::getPropertyAccessor();
+        $this->propertyPaths    = array();
+        foreach ( $fields as $name => $field ) {
+            if ( is_string( $name ) && is_string( $field ) ) {
+                $this->propertyPaths[ $name ] = new PropertyPath( $field );
             } else {
-                $this->propertyPaths[$field] = new PropertyPath($field);
+                $this->propertyPaths[ $field ] = new PropertyPath( $field );
             }
         }
     }
@@ -55,14 +59,15 @@ class DoctrineORMQuerySourceIterator implements SourceIteratorInterface
     public function current()
     {
         $current = $this->iterator->current();
-
         $data = array();
-
-        foreach ($this->propertyPaths as $name => $propertyPath) {
-            $data[$name] = $this->getValue($propertyPath->getValue($current[0]));
+        foreach ( $this->propertyPaths as $name => $propertyPath ) {
+            $data[ $name ] = $this->getValue(
+                $this->getValue( $this->propertyAccessor->getValue( $current[ 0 ], $propertyPath ) )
+            );
         }
-
-        $this->query->getEntityManager()->getUnitOfWork()->detach($current[0]);
+        $this->query->getEntityManager()
+                    ->getUnitOfWork()
+                    ->detach( $current[ 0 ] );
 
         return $data;
     }
@@ -72,14 +77,14 @@ class DoctrineORMQuerySourceIterator implements SourceIteratorInterface
      *
      * @return null|string
      */
-    protected function getValue($value)
+    protected function getValue( $value )
     {
-        if (is_array($value) or $value instanceof \Traversable) {
+        if ( is_array( $value ) or $value instanceof \Traversable ) {
             $value = null;
-        } elseif ($value instanceof \DateTime) {
-            $value = $value->format('r');
-        } elseif (is_object($value)) {
-            $value = (string) $value;
+        } elseif ( $value instanceof \DateTime ) {
+            $value = $value->format( 'r' );
+        } elseif ( is_object( $value ) ) {
+            $value = (string)$value;
         }
 
         return $value;
@@ -114,10 +119,9 @@ class DoctrineORMQuerySourceIterator implements SourceIteratorInterface
      */
     public function rewind()
     {
-        if ($this->iterator) {
-            throw new InvalidMethodCallException('Cannot rewind a Doctrine\ORM\Query');
+        if ( $this->iterator ) {
+            throw new InvalidMethodCallException( 'Cannot rewind a Doctrine\ORM\Query' );
         }
-
         $this->iterator = $this->query->iterate();
         $this->iterator->rewind();
     }
